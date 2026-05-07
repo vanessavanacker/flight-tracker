@@ -721,17 +721,27 @@ async function lookupStatus(num, date, force){
   };
   try{
     let r = await fetch(url, opts);
+    captureLimitHeaders(r);
     // Auto-retry on 429 with exponential backoff (per-second throttle, not monthly quota)
     if(r.status === 429){
       await new Promise(res => setTimeout(res, 3000));
       r = await fetch(url, opts);
+      captureLimitHeaders(r);
     }
     if(r.status === 429){
       await new Promise(res => setTimeout(res, 7000));
       r = await fetch(url, opts);
+      captureLimitHeaders(r);
     }
     if(r.status === 401 || r.status === 403) return cacheReturn(k, { error: 'Auth failed — check key' });
-    if(r.status === 429) return cacheReturn(k, { error: 'Rate limit' });
+    if(r.status === 429){
+      const reset = r.headers.get('x-ratelimit-requests-reset') || r.headers.get('retry-after');
+      const remain = r.headers.get('x-ratelimit-requests-remaining');
+      let msg = 'Rate limit';
+      if(remain !== null) msg += ` (${remain} left)`;
+      if(reset) msg += ` resets ${reset}s`;
+      return cacheReturn(k, { error: msg });
+    }
     if(!r.ok) return cacheReturn(k, { error: `API ${r.status}` });
     const arr = await r.json();
     if(!Array.isArray(arr) || !arr.length) return cacheReturn(k, { error: 'Not found yet' });
@@ -763,6 +773,15 @@ async function lookupStatus(num, date, force){
 function cacheReturn(k, data){
   statusCache[k] = { fetchedAt: Date.now(), data };
   return data;
+}
+let lastRateLimit = null; // { limit, remaining, reset } from most recent API response
+function captureLimitHeaders(r){
+  const limit  = r.headers.get('x-ratelimit-requests-limit');
+  const remain = r.headers.get('x-ratelimit-requests-remaining');
+  const reset  = r.headers.get('x-ratelimit-requests-reset');
+  if(limit !== null || remain !== null){
+    lastRateLimit = { limit, remaining: remain, reset, status: r.status, at: Date.now() };
+  }
 }
 function diffMin(scheduled, actual){
   if(!scheduled || !actual) return null;
@@ -960,8 +979,13 @@ async function refreshNow(){
   }
   btn.disabled = false;
   btn.textContent = '↻ Refresh';
-  $('last-updated').textContent =
-    'Last updated ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  let stamp = 'Last updated ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  if(lastRateLimit){
+    const r = lastRateLimit.remaining, l = lastRateLimit.limit;
+    if(r !== null && l !== null) stamp += `  ·  ${r}/${l} API calls left`;
+    else if(r !== null) stamp += `  ·  ${r} calls left`;
+  }
+  $('last-updated').textContent = stamp;
   renderOverview(currentTravelers());
 }
 function startAutoRefresh(){
