@@ -156,12 +156,22 @@ color:var(–text);margin-bottom:.6rem;
 
 /* Traveler card */
 .traveler{
-background:var(–bg-card);border:1px solid var(–line);
-border-radius:12px;margin-bottom:.9rem;overflow:hidden;
-transition:border-color .2s;
+background:linear-gradient(180deg, #1a2a45 0%, var(–bg-card) 100%);
+border:1px solid var(–line);
+border-radius:12px;margin-bottom:1.4rem;overflow:hidden;
+transition:border-color .2s, transform .15s;
+box-shadow:0 6px 16px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.04);
+position:relative;
 }
-.traveler.has-issue{border-color:var(–amber);box-shadow:0 0 0 1px rgba(245,158,11,.2)}
-.traveler.has-cancel{border-color:var(–red);box-shadow:0 0 0 1px rgba(239,68,68,.25)}
+.traveler::before{
+content:’’;position:absolute;top:0;left:1.1rem;right:1.1rem;height:2px;
+background:linear-gradient(90deg, transparent, var(–gold) 50%, transparent);
+opacity:.4;
+}
+.traveler.has-issue{border-color:var(–amber);box-shadow:0 6px 16px rgba(0,0,0,.3), 0 0 0 1px rgba(245,158,11,.2)}
+.traveler.has-issue::before{background:linear-gradient(90deg, transparent, var(–amber) 50%, transparent);opacity:.6}
+.traveler.has-cancel{border-color:var(–red);box-shadow:0 6px 16px rgba(0,0,0,.3), 0 0 0 1px rgba(239,68,68,.25)}
+.traveler.has-cancel::before{background:linear-gradient(90deg, transparent, var(–red) 50%, transparent);opacity:.7}
 .traveler-head{
 display:flex;align-items:center;gap:.8rem;
 padding:1rem 1.1rem .8rem;cursor:pointer;
@@ -210,6 +220,8 @@ color:var(–text-dim);margin-top:.15rem;
 font-size:.7rem;color:var(–text-dim);margin-top:.2rem;
 letter-spacing:.05em;text-transform:uppercase;
 }
+.leg-manual .leg-num{color:var(–text-mute);font-size:1rem;font-weight:400}
+.leg-manual .leg-route{color:var(–text);font-family:‘Manrope’,sans-serif;font-size:.88rem;font-weight:500;letter-spacing:0}
 
 .badge{
 display:inline-block;
@@ -434,6 +446,11 @@ footer a{color:var(–text-mute);text-decoration:none;border-bottom:1px dotted v
       <label>Flight numbers</label>
       <input id="trav-flights-in" class="mono" placeholder="AF1234, AF5678" autocapitalize="characters">
       <div class="hint">Comma-separated, in travel order. Add layovers as separate flights.</div>
+    </div>
+    <div class="field">
+      <label>Other legs (trains, ferries, car)</label>
+      <textarea id="trav-notes-in" rows="2" placeholder="Eurostar 9123 · London → Brussels · 14:30"></textarea>
+      <div class="hint">One per line. Free text — not auto-tracked, just shown alongside flights.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeTravelerModal()">Cancel</button>
@@ -664,10 +681,12 @@ function openTravelerModal(editId){
     $('trav-name-in').value = t.name || '';
     $('trav-date-in').value = t.date || '';
     $('trav-flights-in').value = (t.flights || []).map(f => f.num).join(', ');
+    $('trav-notes-in').value = t.notes || '';
   } else {
     $('trav-name-in').value = '';
     $('trav-date-in').value = '';
     $('trav-flights-in').value = '';
+    $('trav-notes-in').value = '';
   }
   $('trav-delete-btn').style.display = editId ? 'inline-flex' : 'none';
   $('trav-overlay').classList.add('show');
@@ -678,22 +697,24 @@ async function saveTravelerModal(){
   const name = $('trav-name-in').value.trim();
   const date = $('trav-date-in').value;
   const flightsRaw = $('trav-flights-in').value.trim();
-  if(!name || !date || !flightsRaw){
-    toast('Name, date, and at least one flight number required');
+  const notes = $('trav-notes-in').value.trim();
+  if(!name || !date || (!flightsRaw && !notes)){
+    toast('Need a name, date, and at least one flight or other leg');
     return;
   }
   if(!db){ toast('Not connected to Firebase yet — try again in a moment'); return; }
-  const flights = flightsRaw.split(/[,\s]+/).filter(Boolean)
-    .map(num => ({ num: num.toUpperCase().replace(/\s+/g, '') }));
+  const flights = flightsRaw
+    ? flightsRaw.split(/[,\s]+/).filter(Boolean).map(num => ({ num: num.toUpperCase().replace(/\s+/g, '') }))
+    : [];
   const id = editingTravelerId || ('trv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
   try {
     await db.ref('flightTracker/travelers/' + id).set({
-      id, tripId: currentTripId, name, date, flights,
+      id, tripId: currentTripId, name, date, flights, notes,
       createdAt: editingTravelerId ? travelers[editingTravelerId].createdAt : Date.now(),
     });
     toast(editingTravelerId ? 'Traveler updated' : 'Traveler added');
     closeTravelerModal();
-    setTimeout(refreshNow, 100);
+    if(flights.length) setTimeout(refreshNow, 100);
   } catch(e){
     console.error('Save traveler failed:', e);
     toast('Save failed: ' + (e.code === 'PERMISSION_DENIED' ? 'check Firebase rules' : (e.message || 'unknown')));
@@ -843,10 +864,18 @@ function renderAll(){
 }
 function renderTravelers(list){
   $('travelers-list').innerHTML = list.map(t => {
-    const legs = (t.flights || []).map(f => {
+    const flightLegs = (t.flights || []).map(f => {
       const cached = statusCache[f.num + '|' + t.date];
       return renderLeg(f.num, cached?.data || null, t.date);
     }).join('');
+    const manualLegs = (t.notes || '').split('\n').map(s => s.trim()).filter(Boolean).map(line => `
+      <div class="leg leg-manual">
+        <div class="leg-num">·</div>
+        <div>
+          <div class="leg-route">${esc(line)}</div>
+        </div>
+        <span class="badge b-grey">Manual</span>
+      </div>`).join('');
     let issue = '';
     for(const f of (t.flights || [])){
       const s = statusCache[f.num + '|' + t.date]?.data;
@@ -865,7 +894,7 @@ function renderTravelers(list){
             <button onclick="openTravelerModal('${esc(t.id)}')" title="Edit">✎</button>
           </div>
         </div>
-        <div class="legs">${legs}</div>
+        <div class="legs">${flightLegs}${manualLegs}</div>
       </div>`;
   }).join('');
 }
