@@ -331,7 +331,8 @@ footer a{color:var(–text-mute);text-decoration:none;border-bottom:1px dotted v
 <input id="setup-fb" placeholder="https://xxx-default-rtdb.firebaseio.com">
 
 <label>RapidAPI Key (AeroDataBox)</label>
-<input id="setup-rk" placeholder="abc123def456…" autocomplete="off">
+<input id="setup-rk" placeholder="abc123def456… (optional if set on another device)" autocomplete="off">
+<div class="hint" style="font-size:.78rem;color:var(--text-dim);margin-top:.35rem">If you've already set this up on another device, leave blank — the app will pull the key from Firebase.</div>
 
 <div class="err" id="setup-err"></div>
 
@@ -488,6 +489,7 @@ const AUTO_REFRESH_MS = 5 * 60 * 1000;
 let autoRefreshTimer = null;
 let editingTripId = null;
 let editingTravelerId = null;
+let pendingSetupKey = null; // API key from setup screen, written to Firebase once connected
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const $ = id => document.getElementById(id);
@@ -511,13 +513,15 @@ function saveSetup(){
     errEl.textContent = 'Firebase URL should look like https://xxx-default-rtdb.firebaseio.com';
     errEl.style.display = 'block'; return;
   }
-  if(!rk || rk.length < 20){
-    errEl.textContent = 'RapidAPI key looks too short — paste the full key.';
+  if(rk && rk.length < 20){
+    errEl.textContent = 'RapidAPI key looks too short — paste the full key (or leave blank).';
     errEl.style.display = 'block'; return;
   }
   localStorage.setItem(LS.cfgFb, fb);
-  localStorage.setItem(LS.cfgRk, rk);
-  firebaseUrl = fb; rapidApiKey = rk;
+  if(rk) localStorage.setItem(LS.cfgRk, rk);
+  firebaseUrl = fb;
+  if(rk) rapidApiKey = rk;
+  pendingSetupKey = rk; // will be written to Firebase once connected
   initFirebase();
   showApp();
   startAutoRefresh();
@@ -535,15 +539,38 @@ function initFirebase(){
 function initFirebaseApp(){
   firebase.initializeApp({ databaseURL: firebaseUrl });
   db = firebase.database();
+
+  // Surface connection issues
+  db.ref('.info/connected').on('value', snap => {
+    if(snap.val() === true){
+      // Once connected, push pending API key (if user just entered one)
+      if(pendingSetupKey){
+        db.ref('flightTracker/config/rapidApiKey').set(pendingSetupKey)
+          .then(() => { pendingSetupKey = null; })
+          .catch(e => toast('Could not save key to Firebase: ' + (e.code || e.message)));
+      }
+    }
+  });
+
+  // Cross-device API key sync
+  db.ref('flightTracker/config/rapidApiKey').on('value', snap => {
+    const remote = snap.val();
+    if(remote && remote !== rapidApiKey){
+      rapidApiKey = remote;
+      localStorage.setItem(LS.cfgRk, remote);
+    }
+  });
+
   db.ref('flightTracker/trips').on('value', snap => {
     trips = snap.val() || {};
     renderTripSelect();
     renderAll();
-  });
+  }, err => toast('Read failed: ' + (err.code || err.message)));
+
   db.ref('flightTracker/travelers').on('value', snap => {
     travelers = snap.val() || {};
     renderAll();
-  });
+  }, err => toast('Read failed: ' + (err.code || err.message)));
 }
 
 // ============== TRIPS ==============
@@ -592,18 +619,24 @@ function openTripModal(editId){
 function closeTripModal(){ $('trip-overlay').classList.remove('show'); }
 async function saveTripModal(){
   const name = $('trip-name-in').value.trim();
-  if(!name) return;
-  if(editingTripId){
-    await db.ref('flightTracker/trips/' + editingTripId).update({ name });
-    toast('Trip renamed');
-  } else {
-    const id = 'trip_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-    await db.ref('flightTracker/trips/' + id).set({ id, name, createdAt: Date.now() });
-    currentTripId = id;
-    localStorage.setItem(LS.curTrip, id);
-    toast('Trip created');
+  if(!name){ toast('Trip needs a name'); return; }
+  if(!db){ toast('Not connected to Firebase yet — try again in a moment'); return; }
+  try {
+    if(editingTripId){
+      await db.ref('flightTracker/trips/' + editingTripId).update({ name });
+      toast('Trip renamed');
+    } else {
+      const id = 'trip_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      await db.ref('flightTracker/trips/' + id).set({ id, name, createdAt: Date.now() });
+      currentTripId = id;
+      localStorage.setItem(LS.curTrip, id);
+      toast('Trip created');
+    }
+    closeTripModal();
+  } catch(e){
+    console.error('Save trip failed:', e);
+    toast('Save failed: ' + (e.code === 'PERMISSION_DENIED' ? 'check Firebase rules' : (e.message || 'unknown')));
   }
-  closeTripModal();
 }
 async function deleteCurrentTrip(){
   if(!editingTripId) return;
@@ -649,16 +682,22 @@ async function saveTravelerModal(){
     toast('Name, date, and at least one flight number required');
     return;
   }
+  if(!db){ toast('Not connected to Firebase yet — try again in a moment'); return; }
   const flights = flightsRaw.split(/[,\s]+/).filter(Boolean)
     .map(num => ({ num: num.toUpperCase().replace(/\s+/g, '') }));
   const id = editingTravelerId || ('trv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
-  await db.ref('flightTracker/travelers/' + id).set({
-    id, tripId: currentTripId, name, date, flights,
-    createdAt: editingTravelerId ? travelers[editingTravelerId].createdAt : Date.now(),
-  });
-  toast(editingTravelerId ? 'Traveler updated' : 'Traveler added');
-  closeTravelerModal();
-  setTimeout(refreshNow, 100);
+  try {
+    await db.ref('flightTracker/travelers/' + id).set({
+      id, tripId: currentTripId, name, date, flights,
+      createdAt: editingTravelerId ? travelers[editingTravelerId].createdAt : Date.now(),
+    });
+    toast(editingTravelerId ? 'Traveler updated' : 'Traveler added');
+    closeTravelerModal();
+    setTimeout(refreshNow, 100);
+  } catch(e){
+    console.error('Save traveler failed:', e);
+    toast('Save failed: ' + (e.code === 'PERMISSION_DENIED' ? 'check Firebase rules' : (e.message || 'unknown')));
+  }
 }
 async function deleteCurrentTraveler(){
   if(!editingTravelerId) return;
@@ -940,15 +979,22 @@ function openSettings(){
   $('settings-overlay').classList.add('show');
 }
 function closeSettings(){ $('settings-overlay').classList.remove('show'); }
-function saveSettingsModal(){
+async function saveSettingsModal(){
   const fb = $('settings-fb').value.trim().replace(/\/+$/, '');
   const rk = $('settings-rk').value.trim();
   if(!fb || !rk){ toast('Both fields required'); return; }
   const fbChanged = fb !== firebaseUrl;
+  const rkChanged = rk !== rapidApiKey;
   localStorage.setItem(LS.cfgFb, fb);
   localStorage.setItem(LS.cfgRk, rk);
   firebaseUrl = fb; rapidApiKey = rk;
-  if(fbChanged) initFirebase();
+  if(fbChanged){
+    pendingSetupKey = rk; // re-init will push it once connected
+    initFirebase();
+  } else if(rkChanged && db){
+    try { await db.ref('flightTracker/config/rapidApiKey').set(rk); }
+    catch(e){ toast('Could not sync key to Firebase: ' + (e.code || e.message)); }
+  }
   Object.keys(statusCache).forEach(k => delete statusCache[k]);
   closeSettings();
   toast('Settings saved');
@@ -979,13 +1025,19 @@ document.addEventListener('keydown', e => {
 });
 
 // ============== BOOT ==============
-if(!firebaseUrl || !rapidApiKey){
+if(!firebaseUrl){
   showSetup(true);
 } else {
   showApp();
   initFirebase();
   startAutoRefresh();
-  setTimeout(() => { if(currentTripId) refreshNow(); }, 800);
+  // Wait a moment for Firebase to sync the API key, then refresh
+  setTimeout(() => {
+    if(!rapidApiKey){
+      toast('Waiting for API key from Firebase…');
+    }
+    if(currentTripId && rapidApiKey) refreshNow();
+  }, 1500);
 }
 </script>
 
