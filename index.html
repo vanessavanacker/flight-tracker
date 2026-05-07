@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0a1628">
+<title>Flight Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700&family=JetBrains+Mono:wght@400;500;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+:root{
+  --bg-deep:#070d1a;
+  --bg-mid:#0e1a30;
+  --bg-card:#16243d;
+  --bg-card-hi:#1d2e4a;
+  --line:#1f3358;
+  --text:#e8ecf3;
+  --text-mute:#8294b0;
+  --text-dim:#5a6f8e;
+  --gold:#d4a574;
+  --green:#4ade80;
+  --cyan:#22d3ee;
+  --amber:#f59e0b;
+  --red:#ef4444;
+  --purple:#a78bfa;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:'Manrope',-apple-system,sans-serif;
+  background:var(--bg-deep);
+  color:var(--text);
+  line-height:1.5;
+  font-size:15px;
+  min-height:100vh;
+  background-image:
+    radial-gradient(ellipse at top, rgba(34,211,238,.04), transparent 50%),
+    radial-gradient(ellipse at bottom, rgba(212,165,116,.03), transparent 50%);
+}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;letter-spacing:-.01em}
+header{
+  padding:1.5rem 1.2rem 1rem;
+  border-bottom:1px solid var(--line);
+  position:sticky;top:0;
+  background:rgba(7,13,26,.92);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  z-index:10;
+}
+.brand{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+.brand h1{
+  font-family:'Fraunces',serif;
+  font-weight:500;
+  font-size:1.7rem;
+  font-variation-settings:'opsz' 144;
+  letter-spacing:-.02em;
+}
+.brand .sub{
+  font-family:'JetBrains Mono',monospace;
+  font-size:.72rem;
+  text-transform:uppercase;
+  letter-spacing:.18em;
+  color:var(--text-dim);
+}
+.gear{
+  margin-left:auto;
+  background:none;border:1px solid var(--line);color:var(--text-mute);
+  padding:.4rem .55rem;border-radius:6px;cursor:pointer;
+  font-size:1rem;line-height:1;
+}
+.gear:hover{color:var(--text);border-color:var(--text-mute)}
+main{max-width:780px;margin:0 auto;padding:1.2rem}
+.bar{display:flex;align-items:center;gap:.6rem;margin-bottom:1.5rem;flex-wrap:wrap}
+select,input,button{font-family:inherit;font-size:.92rem}
+select.trip-pick{
+  background:var(--bg-card);
+  color:var(--text);
+  border:1px solid var(--line);
+  padding:.55rem .8rem;
+  border-radius:8px;
+  flex:1;min-width:180px;
+  cursor:pointer;
+}
+.btn{
+  background:var(--bg-card);
+  color:var(--text);
+  border:1px solid var(--line);
+  padding:.55rem .9rem;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:500;
+  display:inline-flex;align-items:center;gap:.4rem;
+  transition:all .15s;
+  white-space:nowrap;
+}
+.btn:hover{background:var(--bg-card-hi);border-color:var(--text-dim)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--gold);color:#0a1628;border-color:var(--gold)}
+.btn-primary:hover{background:#e2b889;border-color:#e2b889}
+.btn-ghost{background:none;border-color:transparent;color:var(--text-mute)}
+.btn-ghost:hover{color:var(--text);background:var(--bg-card)}
+.refresh-meta{
+  display:flex;align-items:center;gap:.8rem;flex-wrap:wrap;
+  margin-top:.6rem;font-size:.78rem;color:var(--text-dim);
+  font-family:'JetBrains Mono',monospace;
+}
+.refresh-meta .live-dot{
+  display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:var(--green);animation:pulse 2s infinite;
+  box-shadow:0 0 8px rgba(74,222,128,.6);
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* Setup screen */
+.setup-card{
+max-width:520px;margin:3rem auto;padding:2rem;
+background:var(–bg-card);border:1px solid var(–line);border-radius:14px;
+}
+.setup-card h2{
+font-family:‘Fraunces’,serif;font-weight:500;font-size:1.6rem;margin-bottom:.4rem;
+font-variation-settings:‘opsz’ 144;
+}
+.setup-card p{color:var(–text-mute);margin-bottom:1.5rem;font-size:.92rem}
+.setup-card label{
+display:block;font-size:.74rem;font-weight:600;letter-spacing:.1em;
+text-transform:uppercase;color:var(–text-mute);margin-top:1.2rem;margin-bottom:.4rem;
+}
+.setup-card input{
+width:100%;background:var(–bg-deep);color:var(–text);
+border:1px solid var(–line);padding:.7rem .9rem;border-radius:8px;
+font-family:‘JetBrains Mono’,monospace;font-size:.85rem;
+}
+.setup-card input:focus{outline:none;border-color:var(–gold)}
+.setup-card details{margin-top:1.4rem;font-size:.84rem}
+.setup-card details summary{color:var(–gold);cursor:pointer;padding:.4rem 0;font-weight:600}
+.setup-card details > div{padding:.8rem 0;color:var(–text-mute);line-height:1.7}
+.setup-card details code{
+background:var(–bg-deep);padding:.1rem .3rem;border-radius:3px;
+font-size:.82rem;color:var(–gold);font-family:‘JetBrains Mono’,monospace;
+}
+.setup-card .err{color:var(–red);font-size:.82rem;margin-top:.5rem;display:none}
+.setup-card button{width:100%;margin-top:1.4rem;padding:.8rem;font-size:.95rem;justify-content:center}
+
+/* Empty state */
+.empty{text-align:center;padding:4rem 1rem;color:var(–text-mute)}
+.empty .glyph{font-size:3rem;margin-bottom:1rem;opacity:.3}
+.empty h3{
+font-family:‘Fraunces’,serif;font-weight:500;font-size:1.3rem;
+color:var(–text);margin-bottom:.6rem;
+}
+.empty p{font-size:.9rem;max-width:340px;margin:0 auto 1.2rem}
+
+/* Traveler card */
+.traveler{
+background:var(–bg-card);border:1px solid var(–line);
+border-radius:12px;margin-bottom:.9rem;overflow:hidden;
+transition:border-color .2s;
+}
+.traveler.has-issue{border-color:var(–amber);box-shadow:0 0 0 1px rgba(245,158,11,.2)}
+.traveler.has-cancel{border-color:var(–red);box-shadow:0 0 0 1px rgba(239,68,68,.25)}
+.traveler-head{
+display:flex;align-items:center;gap:.8rem;
+padding:1rem 1.1rem .8rem;cursor:pointer;
+}
+.traveler-name{
+font-family:‘Fraunces’,serif;font-weight:500;font-size:1.18rem;
+font-variation-settings:‘opsz’ 32;letter-spacing:-.01em;flex:1;
+}
+.traveler-date{
+font-family:‘JetBrains Mono’,monospace;font-size:.78rem;
+color:var(–text-dim);text-transform:uppercase;letter-spacing:.1em;
+}
+.traveler-actions{display:flex;gap:.3rem;opacity:.5;transition:opacity .15s}
+.traveler:hover .traveler-actions{opacity:1}
+.traveler-actions button{
+background:none;border:none;color:var(–text-mute);
+cursor:pointer;padding:.2rem .35rem;font-size:.95rem;border-radius:4px;
+}
+.traveler-actions button:hover{color:var(–text);background:rgba(255,255,255,.05)}
+
+.legs{padding:0 1.1rem 1rem}
+.leg{
+display:grid;grid-template-columns:auto 1fr auto;gap:.8rem;
+padding:.7rem 0;border-top:1px dashed var(–line);
+align-items:center;
+}
+.leg:first-child{border-top:none}
+.leg-num{
+font-family:‘JetBrains Mono’,monospace;font-weight:700;
+font-size:.95rem;color:var(–gold);
+}
+.leg-route{
+font-family:‘JetBrains Mono’,monospace;
+font-size:.78rem;color:var(–text-mute);
+display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;
+}
+.leg-route .ap{color:var(–text);font-weight:500}
+.leg-route .arrow{color:var(–text-dim)}
+.leg-times{
+font-family:‘JetBrains Mono’,monospace;font-size:.78rem;
+color:var(–text-dim);margin-top:.15rem;
+}
+.leg-times .delay{color:var(–amber);font-weight:600}
+.leg-times .early{color:var(–green);font-weight:600}
+.leg-meta{
+font-size:.7rem;color:var(–text-dim);margin-top:.2rem;
+letter-spacing:.05em;text-transform:uppercase;
+}
+
+.badge{
+display:inline-block;
+padding:.25rem .55rem;
+border-radius:4px;
+font-family:‘JetBrains Mono’,monospace;
+font-size:.68rem;
+font-weight:700;
+letter-spacing:.08em;
+text-transform:uppercase;
+white-space:nowrap;
+}
+.b-grey{background:rgba(138,148,176,.15);color:var(–text-mute)}
+.b-cyan{background:rgba(34,211,238,.15);color:var(–cyan);box-shadow:inset 0 0 0 1px rgba(34,211,238,.2)}
+.b-green{background:rgba(74,222,128,.15);color:var(–green);box-shadow:inset 0 0 0 1px rgba(74,222,128,.2)}
+.b-amber{background:rgba(245,158,11,.18);color:var(–amber);box-shadow:inset 0 0 0 1px rgba(245,158,11,.25)}
+.b-red{background:rgba(239,68,68,.18);color:var(–red);box-shadow:inset 0 0 0 1px rgba(239,68,68,.25)}
+.b-purple{background:rgba(167,139,250,.18);color:var(–purple);box-shadow:inset 0 0 0 1px rgba(167,139,250,.25)}
+
+/* Modal */
+.overlay{
+position:fixed;inset:0;background:rgba(7,13,26,.8);
+backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:50;
+display:none;align-items:flex-end;justify-content:center;
+padding:1rem;
+}
+.overlay.show{display:flex}
+.modal{
+background:var(–bg-card);border:1px solid var(–line);
+border-radius:14px 14px 0 0;
+padding:1.6rem;width:100%;max-width:520px;
+max-height:90vh;overflow-y:auto;
+}
+@media(min-width:600px){
+.overlay{align-items:center}
+.modal{border-radius:14px}
+}
+.modal h3{
+font-family:‘Fraunces’,serif;font-weight:500;font-size:1.35rem;margin-bottom:1rem;
+font-variation-settings:‘opsz’ 32;
+}
+.modal .field{margin-bottom:1rem}
+.modal label{
+display:block;font-size:.74rem;font-weight:600;letter-spacing:.1em;
+text-transform:uppercase;color:var(–text-mute);margin-bottom:.35rem;
+}
+.modal input,.modal textarea{
+width:100%;background:var(–bg-deep);color:var(–text);
+border:1px solid var(–line);padding:.65rem .8rem;border-radius:8px;
+font-family:inherit;font-size:.92rem;
+}
+.modal input.mono{font-family:‘JetBrains Mono’,monospace}
+.modal input:focus,.modal textarea:focus{outline:none;border-color:var(–gold)}
+.modal .hint{font-size:.78rem;color:var(–text-dim);margin-top:.35rem}
+.modal-actions{display:flex;gap:.6rem;margin-top:1.4rem;flex-wrap:wrap}
+.modal-actions .btn{flex:1;justify-content:center;min-width:90px}
+
+/* Toast */
+.toast{
+position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%) translateY(150%);
+background:var(–bg-card-hi);color:var(–text);
+padding:.8rem 1.2rem;border-radius:8px;border:1px solid var(–line);
+font-size:.88rem;z-index:100;transition:transform .3s;
+box-shadow:0 8px 24px rgba(0,0,0,.4);
+}
+.toast.show{transform:translateX(-50%) translateY(0)}
+
+/* Status overview strip */
+.overview{
+display:grid;grid-template-columns:repeat(auto-fit,minmax(72px,1fr));
+gap:.5rem;margin-bottom:1.2rem;
+}
+.ov-stat{
+background:var(–bg-card);border:1px solid var(–line);
+padding:.6rem .55rem;border-radius:8px;text-align:center;
+}
+.ov-num{
+font-family:‘JetBrains Mono’,monospace;font-size:1.2rem;font-weight:700;
+}
+.ov-lbl{
+font-size:.65rem;color:var(–text-dim);text-transform:uppercase;
+letter-spacing:.1em;margin-top:.15rem;
+}
+.ov-stat.warn{border-color:var(–amber)}
+.ov-stat.warn .ov-num{color:var(–amber)}
+.ov-stat.crit{border-color:var(–red)}
+.ov-stat.crit .ov-num{color:var(–red)}
+.ov-stat.good .ov-num{color:var(–green)}
+
+footer{
+padding:2rem 1rem;text-align:center;
+color:var(–text-dim);font-size:.78rem;
+}
+footer a{color:var(–text-mute);text-decoration:none;border-bottom:1px dotted var(–text-dim)}
+</style>
+
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>Flight Tracker</h1>
+    <span class="sub">live ops</span>
+    <button class="gear" id="settings-btn" onclick="openSettings()" title="Settings">⚙</button>
+  </div>
+</header>
+
+<main>
+
+<!-- SETUP SCREEN -->
+
+<div id="setup-screen" style="display:none">
+  <div class="setup-card">
+    <h2>One-time setup</h2>
+    <p>You'll need a Firebase Realtime Database (free) and a RapidAPI key for AeroDataBox (free, 500 lookups/month).</p>
+
+```
+<label>Firebase Database URL</label>
+<input id="setup-fb" placeholder="https://xxx-default-rtdb.firebaseio.com">
+
+<label>RapidAPI Key (AeroDataBox)</label>
+<input id="setup-rk" placeholder="abc123def456…" autocomplete="off">
+
+<div class="err" id="setup-err"></div>
+
+<button class="btn btn-primary" onclick="saveSetup()">Save &amp; Continue</button>
+
+<details>
+  <summary>How do I get these?</summary>
+  <div>
+    <strong>Firebase URL:</strong><br>
+    1. Go to <a href="https://console.firebase.google.com" target="_blank" style="color:var(--gold)">console.firebase.google.com</a><br>
+    2. <em>Add project</em> &rarr; name it (e.g. "flight-tracker") &rarr; create.<br>
+    3. Left sidebar &rarr; <em>Realtime Database</em> &rarr; <em>Create Database</em> &rarr; choose <em>test mode</em>.<br>
+    4. Copy the URL shown — looks like <code>https://flight-tracker-xxxxx-default-rtdb.firebaseio.com</code><br>
+    <br>
+    <strong>RapidAPI Key:</strong><br>
+    1. Go to <a href="https://rapidapi.com/aedbx-aedbx/api/aerodatabox" target="_blank" style="color:var(--gold)">AeroDataBox on RapidAPI</a> &rarr; <em>Subscribe</em> &rarr; pick the free Basic plan.<br>
+    2. Click any endpoint &rarr; copy the <code>X-RapidAPI-Key</code> from the code sample.<br>
+  </div>
+</details>
+```
+
+  </div>
+</div>
+
+<!-- MAIN APP -->
+
+<div id="app-screen" style="display:none">
+
+  <div class="bar">
+    <select class="trip-pick" id="trip-select" onchange="onTripChange()"></select>
+    <button class="btn" onclick="openTripModal()">+ Trip</button>
+  </div>
+
+  <div id="overview" class="overview" style="display:none"></div>
+
+  <div class="bar" style="justify-content:space-between;margin-bottom:.8rem">
+    <button class="btn btn-primary" id="add-traveler-btn" onclick="openTravelerModal()">+ Add traveler</button>
+    <button class="btn" onclick="refreshNow()" id="refresh-btn">↻ Refresh</button>
+  </div>
+
+  <div class="refresh-meta">
+    <span class="live-dot"></span>
+    <span id="last-updated">Never refreshed</span>
+    <span style="margin-left:auto">Auto-refresh: 5 min</span>
+  </div>
+
+  <div id="travelers-list" style="margin-top:1.5rem"></div>
+
+  <div id="empty-state" class="empty" style="display:none">
+    <div class="glyph">✈</div>
+    <h3>No travelers yet</h3>
+    <p>Add a person, their travel date, and one or more flight numbers to start tracking.</p>
+    <button class="btn btn-primary" onclick="openTravelerModal()">+ Add first traveler</button>
+  </div>
+
+  <div id="no-trip-state" class="empty" style="display:none">
+    <div class="glyph">📋</div>
+    <h3>No trips yet</h3>
+    <p>Create a trip to organise travelers (e.g. "VV Birthday Bash 2026").</p>
+    <button class="btn btn-primary" onclick="openTripModal()">+ New trip</button>
+  </div>
+
+</div>
+
+</main>
+
+<!-- MODAL: New / edit trip -->
+
+<div class="overlay" id="trip-overlay">
+  <div class="modal">
+    <h3 id="trip-modal-title">New trip</h3>
+    <div class="field">
+      <label>Trip name</label>
+      <input id="trip-name-in" placeholder="e.g. VV Birthday Bash 2026">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeTripModal()">Cancel</button>
+      <button class="btn" id="trip-delete-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="deleteCurrentTrip()">Delete</button>
+      <button class="btn btn-primary" onclick="saveTripModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: New / edit traveler -->
+
+<div class="overlay" id="trav-overlay">
+  <div class="modal">
+    <h3 id="trav-modal-title">Add traveler</h3>
+    <div class="field">
+      <label>Name</label>
+      <input id="trav-name-in" placeholder="e.g. Sarah Johnson">
+    </div>
+    <div class="field">
+      <label>Travel date</label>
+      <input id="trav-date-in" type="date">
+      <div class="hint">Date the journey starts (date of the first flight).</div>
+    </div>
+    <div class="field">
+      <label>Flight numbers</label>
+      <input id="trav-flights-in" class="mono" placeholder="AF1234, AF5678" autocapitalize="characters">
+      <div class="hint">Comma-separated, in travel order. Add layovers as separate flights.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeTravelerModal()">Cancel</button>
+      <button class="btn" id="trav-delete-btn" style="display:none;color:var(--red);border-color:var(--red)" onclick="deleteCurrentTraveler()">Delete</button>
+      <button class="btn btn-primary" onclick="saveTravelerModal()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Settings -->
+
+<div class="overlay" id="settings-overlay">
+  <div class="modal">
+    <h3>Settings</h3>
+    <div class="field">
+      <label>Firebase Database URL</label>
+      <input id="settings-fb" class="mono">
+    </div>
+    <div class="field">
+      <label>RapidAPI Key</label>
+      <input id="settings-rk" class="mono">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveSettingsModal()">Save</button>
+    </div>
+    <div style="margin-top:1.2rem;padding-top:1.2rem;border-top:1px solid var(--line);font-size:.8rem;color:var(--text-dim)">
+      Settings are stored locally on this device only. Trip and traveler data syncs via Firebase.
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<footer>
+  Flight data via <a href="https://rapidapi.com/aedbx-aedbx/api/aerodatabox" target="_blank">AeroDataBox</a> &middot;
+  Caches 5 min &middot;
+  v1
+</footer>
+
+<script>
+// ============== STATE ==============
+const LS = { cfgFb:'ft_firebase_url', cfgRk:'ft_rapidapi_key', curTrip:'ft_current_trip' };
+let firebaseUrl = localStorage.getItem(LS.cfgFb) || '';
+let rapidApiKey = localStorage.getItem(LS.cfgRk) || '';
+let db = null;
+let trips = {};
+let travelers = {};
+let currentTripId = localStorage.getItem(LS.curTrip) || null;
+const statusCache = {};
+const CACHE_MS = 5 * 60 * 1000;
+const AUTO_REFRESH_MS = 5 * 60 * 1000;
+let autoRefreshTimer = null;
+let editingTripId = null;
+let editingTravelerId = null;
+
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const $ = id => document.getElementById(id);
+
+// ============== SETUP / FIREBASE ==============
+function showSetup(prefill){
+  $('setup-screen').style.display = 'block';
+  $('app-screen').style.display = 'none';
+  if(prefill){ $('setup-fb').value = firebaseUrl; $('setup-rk').value = rapidApiKey; }
+}
+function showApp(){
+  $('setup-screen').style.display = 'none';
+  $('app-screen').style.display = 'block';
+}
+function saveSetup(){
+  const fb = $('setup-fb').value.trim().replace(/\/+$/, '');
+  const rk = $('setup-rk').value.trim();
+  const errEl = $('setup-err');
+  errEl.style.display = 'none';
+  if(!fb || !/^https:\/\/[a-z0-9-]+\..*firebaseio\.com$/.test(fb)){
+    errEl.textContent = 'Firebase URL should look like https://xxx-default-rtdb.firebaseio.com';
+    errEl.style.display = 'block'; return;
+  }
+  if(!rk || rk.length < 20){
+    errEl.textContent = 'RapidAPI key looks too short — paste the full key.';
+    errEl.style.display = 'block'; return;
+  }
+  localStorage.setItem(LS.cfgFb, fb);
+  localStorage.setItem(LS.cfgRk, rk);
+  firebaseUrl = fb; rapidApiKey = rk;
+  initFirebase();
+  showApp();
+  startAutoRefresh();
+}
+function initFirebase(){
+  if(!firebaseUrl) return;
+  try{
+    if(firebase.apps.length){ firebase.app().delete().then(initFirebaseApp); }
+    else { initFirebaseApp(); }
+  } catch(e){
+    console.error('Firebase init failed:', e);
+    toast('Firebase init failed — check the URL in settings.');
+  }
+}
+function initFirebaseApp(){
+  firebase.initializeApp({ databaseURL: firebaseUrl });
+  db = firebase.database();
+  db.ref('flightTracker/trips').on('value', snap => {
+    trips = snap.val() || {};
+    renderTripSelect();
+    renderAll();
+  });
+  db.ref('flightTracker/travelers').on('value', snap => {
+    travelers = snap.val() || {};
+    renderAll();
+  });
+}
+
+// ============== TRIPS ==============
+function tripList(){
+  return Object.values(trips).sort((a,b) => (b.createdAt||0) - (a.createdAt||0));
+}
+function renderTripSelect(){
+  const sel = $('trip-select');
+  const list = tripList();
+  if(!list.length){
+    sel.innerHTML = '<option>No trips yet</option>';
+    sel.disabled = true;
+    $('add-traveler-btn').disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  $('add-traveler-btn').disabled = false;
+  if(!currentTripId || !trips[currentTripId]){
+    currentTripId = list[0].id;
+    localStorage.setItem(LS.curTrip, currentTripId);
+  }
+  sel.innerHTML = list.map(t =>
+    `<option value="${esc(t.id)}" ${t.id === currentTripId ? 'selected' : ''}>${esc(t.name)}</option>`
+  ).join('') + '<option value="__manage__">— Manage current trip —</option>';
+}
+function onTripChange(){
+  const v = $('trip-select').value;
+  if(v === '__manage__'){
+    $('trip-select').value = currentTripId;
+    openTripModal(currentTripId);
+    return;
+  }
+  currentTripId = v;
+  localStorage.setItem(LS.curTrip, currentTripId);
+  renderAll();
+  setTimeout(refreshNow, 100);
+}
+function openTripModal(editId){
+  editingTripId = editId || null;
+  $('trip-modal-title').textContent = editId ? 'Edit trip' : 'New trip';
+  $('trip-name-in').value = editId ? (trips[editId]?.name || '') : '';
+  $('trip-delete-btn').style.display = editId ? 'inline-flex' : 'none';
+  $('trip-overlay').classList.add('show');
+  setTimeout(() => $('trip-name-in').focus(), 50);
+}
+function closeTripModal(){ $('trip-overlay').classList.remove('show'); }
+async function saveTripModal(){
+  const name = $('trip-name-in').value.trim();
+  if(!name) return;
+  if(editingTripId){
+    await db.ref('flightTracker/trips/' + editingTripId).update({ name });
+    toast('Trip renamed');
+  } else {
+    const id = 'trip_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    await db.ref('flightTracker/trips/' + id).set({ id, name, createdAt: Date.now() });
+    currentTripId = id;
+    localStorage.setItem(LS.curTrip, id);
+    toast('Trip created');
+  }
+  closeTripModal();
+}
+async function deleteCurrentTrip(){
+  if(!editingTripId) return;
+  if(!confirm('Delete this trip and all its travelers? This cannot be undone.')) return;
+  const tripTravelers = Object.values(travelers).filter(t => t.tripId === editingTripId);
+  for(const t of tripTravelers) await db.ref('flightTracker/travelers/' + t.id).remove();
+  await db.ref('flightTracker/trips/' + editingTripId).remove();
+  if(currentTripId === editingTripId) currentTripId = null;
+  toast('Trip deleted');
+  closeTripModal();
+}
+
+// ============== TRAVELERS ==============
+function currentTravelers(){
+  return Object.values(travelers)
+    .filter(t => t.tripId === currentTripId)
+    .sort((a,b) => (a.date||'').localeCompare(b.date||'') || (a.name||'').localeCompare(b.name||''));
+}
+function openTravelerModal(editId){
+  if(!currentTripId) return;
+  editingTravelerId = editId || null;
+  $('trav-modal-title').textContent = editId ? 'Edit traveler' : 'Add traveler';
+  if(editId){
+    const t = travelers[editId];
+    $('trav-name-in').value = t.name || '';
+    $('trav-date-in').value = t.date || '';
+    $('trav-flights-in').value = (t.flights || []).map(f => f.num).join(', ');
+  } else {
+    $('trav-name-in').value = '';
+    $('trav-date-in').value = '';
+    $('trav-flights-in').value = '';
+  }
+  $('trav-delete-btn').style.display = editId ? 'inline-flex' : 'none';
+  $('trav-overlay').classList.add('show');
+  setTimeout(() => $('trav-name-in').focus(), 50);
+}
+function closeTravelerModal(){ $('trav-overlay').classList.remove('show'); }
+async function saveTravelerModal(){
+  const name = $('trav-name-in').value.trim();
+  const date = $('trav-date-in').value;
+  const flightsRaw = $('trav-flights-in').value.trim();
+  if(!name || !date || !flightsRaw){
+    toast('Name, date, and at least one flight number required');
+    return;
+  }
+  const flights = flightsRaw.split(/[,\s]+/).filter(Boolean)
+    .map(num => ({ num: num.toUpperCase().replace(/\s+/g, '') }));
+  const id = editingTravelerId || ('trv_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+  await db.ref('flightTracker/travelers/' + id).set({
+    id, tripId: currentTripId, name, date, flights,
+    createdAt: editingTravelerId ? travelers[editingTravelerId].createdAt : Date.now(),
+  });
+  toast(editingTravelerId ? 'Traveler updated' : 'Traveler added');
+  closeTravelerModal();
+  setTimeout(refreshNow, 100);
+}
+async function deleteCurrentTraveler(){
+  if(!editingTravelerId) return;
+  if(!confirm('Remove this traveler?')) return;
+  await db.ref('flightTracker/travelers/' + editingTravelerId).remove();
+  toast('Traveler removed');
+  closeTravelerModal();
+}
+
+// ============== FLIGHT STATUS LOOKUP ==============
+async function lookupStatus(num, date, force){
+  const k = num + '|' + date;
+  const cached = statusCache[k];
+  if(!force && cached && (Date.now() - cached.fetchedAt) < CACHE_MS) return cached.data;
+  try{
+    const r = await fetch(
+      `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(num)}/${date}`,
+      {
+        method: 'GET', mode: 'cors', credentials: 'omit',
+        headers: { 'X-RapidAPI-Key': rapidApiKey, 'X-RapidAPI-Host': 'aerodatabox.p.rapidapi.com' }
+      }
+    );
+    if(r.status === 401 || r.status === 403) return cacheReturn(k, { error: 'Auth failed — check key' });
+    if(r.status === 429) return cacheReturn(k, { error: 'Rate limit' });
+    if(!r.ok) return cacheReturn(k, { error: `API ${r.status}` });
+    const arr = await r.json();
+    if(!Array.isArray(arr) || !arr.length) return cacheReturn(k, { error: 'Not found yet' });
+    const f = arr[0];
+    const t = path => path?.local || path?.utc || null;
+    const parseHHMM = s => {
+      if(!s) return null;
+      const m = s.match(/[\sT](\d{2}:\d{2})/);
+      return m ? m[1] : null;
+    };
+    const data = {
+      status:       f.status || 'Unknown',
+      depAirport:   f.departure?.airport?.iata || f.departure?.airport?.icao || f.departure?.airport?.name || '?',
+      arrAirport:   f.arrival?.airport?.iata   || f.arrival?.airport?.icao   || f.arrival?.airport?.name   || '?',
+      depScheduled: parseHHMM(t(f.departure?.scheduledTime)),
+      depActual:    parseHHMM(t(f.departure?.actualTime)) || parseHHMM(t(f.departure?.revisedTime)) || parseHHMM(t(f.departure?.predictedTime)),
+      arrScheduled: parseHHMM(t(f.arrival?.scheduledTime)),
+      arrActual:    parseHHMM(t(f.arrival?.actualTime))   || parseHHMM(t(f.arrival?.revisedTime))   || parseHHMM(t(f.arrival?.predictedTime)),
+      depTerminal:  f.departure?.terminal || '',
+      depGate:      f.departure?.gate || '',
+      airline:      f.airline?.name || '',
+      aircraft:     f.aircraft?.model || '',
+    };
+    return cacheReturn(k, data);
+  } catch(e){
+    return { error: 'Network error' };
+  }
+}
+function cacheReturn(k, data){
+  statusCache[k] = { fetchedAt: Date.now(), data };
+  return data;
+}
+function diffMin(scheduled, actual){
+  if(!scheduled || !actual) return null;
+  const [sh,sm] = scheduled.split(':').map(Number);
+  const [ah,am] = actual.split(':').map(Number);
+  const d = (ah*60+am) - (sh*60+sm);
+  if(d < -720) return d + 1440;
+  if(d >  720) return d - 1440;
+  return d;
+}
+function statusBadge(s){
+  if(!s || s.error) return `<span class="badge b-grey">${esc(s?.error || '—')}</span>`;
+  const u = (s.status || '').toLowerCase();
+  if(u.includes('cancel'))  return '<span class="badge b-red">Cancelled</span>';
+  if(u.includes('divert'))  return '<span class="badge b-purple">Diverted</span>';
+  if(u.includes('arrived') || u.includes('landed')) return '<span class="badge b-green">Landed</span>';
+  if(u.includes('en route') || u.includes('airborne') || u.includes('inflight') || u.includes('flying'))
+    return '<span class="badge b-cyan">In Air</span>';
+  if(u.includes('boarding')) return '<span class="badge b-cyan">Boarding</span>';
+  if(u.includes('departed')) return '<span class="badge b-cyan">Departed</span>';
+  if(u.includes('delay'))    return '<span class="badge b-amber">Delayed</span>';
+  const dm = diffMin(s.depScheduled, s.depActual);
+  if(dm !== null && dm >= 15) return '<span class="badge b-amber">Delayed</span>';
+  if(u.includes('expected') || u.includes('scheduled') || u.includes('on time'))
+    return '<span class="badge b-grey">Scheduled</span>';
+  return `<span class="badge b-grey">${esc(s.status || '—')}</span>`;
+}
+function isProblemStatus(s){
+  if(!s || s.error) return false;
+  const u = (s.status || '').toLowerCase();
+  if(u.includes('cancel')) return 'cancel';
+  if(u.includes('divert')) return 'cancel';
+  if(u.includes('delay'))  return 'amber';
+  const dm = diffMin(s.depScheduled, s.depActual);
+  if(dm !== null && dm >= 15) return 'amber';
+  return false;
+}
+
+// ============== RENDERING ==============
+function renderAll(){
+  if(!currentTripId || !trips[currentTripId]){
+    $('overview').style.display = 'none';
+    $('travelers-list').innerHTML = '';
+    $('empty-state').style.display = 'none';
+    $('no-trip-state').style.display = tripList().length ? 'none' : 'block';
+    return;
+  }
+  $('no-trip-state').style.display = 'none';
+  const list = currentTravelers();
+  if(!list.length){
+    $('overview').style.display = 'none';
+    $('travelers-list').innerHTML = '';
+    $('empty-state').style.display = 'block';
+    return;
+  }
+  $('empty-state').style.display = 'none';
+  renderTravelers(list);
+  renderOverview(list);
+}
+function renderTravelers(list){
+  $('travelers-list').innerHTML = list.map(t => {
+    const legs = (t.flights || []).map(f => {
+      const cached = statusCache[f.num + '|' + t.date];
+      return renderLeg(f.num, cached?.data || null, t.date);
+    }).join('');
+    let issue = '';
+    for(const f of (t.flights || [])){
+      const s = statusCache[f.num + '|' + t.date]?.data;
+      const p = isProblemStatus(s);
+      if(p === 'cancel'){ issue = 'has-cancel'; break; }
+      if(p === 'amber') issue = 'has-issue';
+    }
+    return `
+      <div class="traveler ${issue}">
+        <div class="traveler-head" onclick="openTravelerModal('${esc(t.id)}')">
+          <div style="flex:1">
+            <div class="traveler-name">${esc(t.name)}</div>
+            <div class="traveler-date">${esc(formatDate(t.date))}</div>
+          </div>
+          <div class="traveler-actions" onclick="event.stopPropagation()">
+            <button onclick="openTravelerModal('${esc(t.id)}')" title="Edit">✎</button>
+          </div>
+        </div>
+        <div class="legs">${legs}</div>
+      </div>`;
+  }).join('');
+}
+function renderLeg(num, s, date){
+  if(!s){
+    return `
+      <div class="leg">
+        <div class="leg-num">${esc(num)}</div>
+        <div>
+          <div class="leg-route" style="opacity:.5">…</div>
+          <div class="leg-times" style="opacity:.5">Looking up…</div>
+        </div>
+        <span class="badge b-grey">…</span>
+      </div>`;
+  }
+  if(s.error){
+    return `
+      <div class="leg">
+        <div class="leg-num">${esc(num)}</div>
+        <div>
+          <div class="leg-route" style="color:var(--text-dim)">${esc(date)}</div>
+          <div class="leg-meta" style="color:var(--text-dim)">${esc(s.error)}</div>
+        </div>
+        <span class="badge b-grey">${esc(s.error)}</span>
+      </div>`;
+  }
+  const dDelay = diffMin(s.depScheduled, s.depActual);
+  const aDelay = diffMin(s.arrScheduled, s.arrActual);
+  const fmtDelta = m => {
+    if(m === null || m === 0) return '';
+    if(m > 0) return ` <span class="delay">+${m}m</span>`;
+    return ` <span class="early">${m}m</span>`;
+  };
+  const dTime = s.depActual || s.depScheduled;
+  const aTime = s.arrActual || s.arrScheduled;
+  const meta = [
+    s.airline,
+    s.depTerminal ? `T${s.depTerminal}` : '',
+    s.depGate ? `Gate ${s.depGate}` : '',
+    s.aircraft || ''
+  ].filter(Boolean).join(' · ');
+  return `
+    <div class="leg">
+      <div class="leg-num">${esc(num)}</div>
+      <div>
+        <div class="leg-route">
+          <span class="ap">${esc(s.depAirport)}</span>
+          <span class="arrow">→</span>
+          <span class="ap">${esc(s.arrAirport)}</span>
+        </div>
+        <div class="leg-times">
+          ${esc(dTime || '—')}${fmtDelta(dDelay)}
+          <span style="color:var(--text-dim);margin:0 .3rem">→</span>
+          ${esc(aTime || '—')}${fmtDelta(aDelay)}
+        </div>
+        ${meta ? `<div class="leg-meta">${esc(meta)}</div>` : ''}
+      </div>
+      ${statusBadge(s)}
+    </div>`;
+}
+function renderOverview(list){
+  const ov = $('overview');
+  if(!list.length){ ov.style.display = 'none'; return; }
+  let onTime = 0, delayed = 0, cancelled = 0, landed = 0, inAir = 0, unknown = 0;
+  for(const t of list){
+    for(const f of (t.flights || [])){
+      const s = statusCache[f.num + '|' + t.date]?.data;
+      if(!s || s.error){ unknown++; continue; }
+      const u = (s.status || '').toLowerCase();
+      if(u.includes('cancel'))                                                      { cancelled++; continue; }
+      if(u.includes('arrived') || u.includes('landed'))                             { landed++; continue; }
+      if(u.includes('en route') || u.includes('airborne') || u.includes('inflight') || u.includes('flying'))
+                                                                                    { inAir++; continue; }
+      if(u.includes('delay'))                                                       { delayed++; continue; }
+      const dm = diffMin(s.depScheduled, s.depActual);
+      if(dm !== null && dm >= 15)                                                   { delayed++; continue; }
+      onTime++;
+    }
+  }
+  ov.innerHTML = `
+    <div class="ov-stat"><div class="ov-num">${list.length}</div><div class="ov-lbl">People</div></div>
+    <div class="ov-stat good"><div class="ov-num">${onTime + landed + inAir}</div><div class="ov-lbl">On track</div></div>
+    <div class="ov-stat ${delayed?'warn':''}"><div class="ov-num">${delayed}</div><div class="ov-lbl">Delayed</div></div>
+    <div class="ov-stat ${cancelled?'crit':''}"><div class="ov-num">${cancelled}</div><div class="ov-lbl">Cancelled</div></div>
+    <div class="ov-stat"><div class="ov-num">${unknown}</div><div class="ov-lbl">Pending</div></div>`;
+  ov.style.display = 'grid';
+}
+function formatDate(iso){
+  if(!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  return d.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+}
+
+// ============== REFRESH ==============
+async function refreshNow(){
+  if(!currentTripId) return;
+  const list = currentTravelers();
+  if(!list.length) return;
+  const btn = $('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = '↻ Refreshing…';
+  for(const t of list) for(const f of (t.flights || [])) delete statusCache[f.num + '|' + t.date];
+  renderTravelers(list);
+  for(const t of list){
+    for(const f of (t.flights || [])){
+      await lookupStatus(f.num, t.date, true);
+      renderTravelers(currentTravelers());
+      renderOverview(currentTravelers());
+      await new Promise(r => setTimeout(r, 250));
+    }
+  }
+  btn.disabled = false;
+  btn.textContent = '↻ Refresh';
+  $('last-updated').textContent =
+    'Last updated ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+  renderOverview(currentTravelers());
+}
+function startAutoRefresh(){
+  if(autoRefreshTimer) clearInterval(autoRefreshTimer);
+  autoRefreshTimer = setInterval(() => {
+    if(document.visibilityState === 'visible') refreshNow();
+  }, AUTO_REFRESH_MS);
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && currentTripId){
+    const list = currentTravelers();
+    let stale = false;
+    for(const t of list) for(const f of (t.flights || [])){
+      const c = statusCache[f.num + '|' + t.date];
+      if(!c || (Date.now() - c.fetchedAt) > CACHE_MS){ stale = true; break; }
+    }
+    if(stale) refreshNow();
+  }
+});
+
+// ============== SETTINGS ==============
+function openSettings(){
+  $('settings-fb').value = firebaseUrl;
+  $('settings-rk').value = rapidApiKey;
+  $('settings-overlay').classList.add('show');
+}
+function closeSettings(){ $('settings-overlay').classList.remove('show'); }
+function saveSettingsModal(){
+  const fb = $('settings-fb').value.trim().replace(/\/+$/, '');
+  const rk = $('settings-rk').value.trim();
+  if(!fb || !rk){ toast('Both fields required'); return; }
+  const fbChanged = fb !== firebaseUrl;
+  localStorage.setItem(LS.cfgFb, fb);
+  localStorage.setItem(LS.cfgRk, rk);
+  firebaseUrl = fb; rapidApiKey = rk;
+  if(fbChanged) initFirebase();
+  Object.keys(statusCache).forEach(k => delete statusCache[k]);
+  closeSettings();
+  toast('Settings saved');
+  if(currentTripId) refreshNow();
+}
+
+// ============== MISC UI ==============
+let toastTimer = null;
+function toast(msg){
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+// Close modals on overlay tap
+['trip-overlay','trav-overlay','settings-overlay'].forEach(id => {
+  $(id).addEventListener('click', e => {
+    if(e.target.id === id) e.target.classList.remove('show');
+  });
+});
+// Close modals on Escape
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){
+    ['trip-overlay','trav-overlay','settings-overlay'].forEach(id => $(id).classList.remove('show'));
+  }
+});
+
+// ============== BOOT ==============
+if(!firebaseUrl || !rapidApiKey){
+  showSetup(true);
+} else {
+  showApp();
+  initFirebase();
+  startAutoRefresh();
+  setTimeout(() => { if(currentTripId) refreshNow(); }, 800);
+}
+</script>
+
+</body>
+</html>
