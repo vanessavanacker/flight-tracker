@@ -711,15 +711,21 @@ async function deleteCurrentTraveler(){
 async function lookupStatus(num, date, force){
   const k = num + '|' + date;
   const cached = statusCache[k];
-  if(!force && cached && (Date.now() - cached.fetchedAt) < CACHE_MS) return cached.data;
+  // Use shorter TTL for previously-failed lookups so transient errors recover quickly
+  const ttl = (cached && cached.data && cached.data.error) ? 60 * 1000 : CACHE_MS;
+  if(!force && cached && (Date.now() - cached.fetchedAt) < ttl) return cached.data;
+  const url = `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(num)}/${date}`;
+  const opts = {
+    method: 'GET', mode: 'cors', credentials: 'omit',
+    headers: { 'X-RapidAPI-Key': rapidApiKey, 'X-RapidAPI-Host': 'aerodatabox.p.rapidapi.com' }
+  };
   try{
-    const r = await fetch(
-      `https://aerodatabox.p.rapidapi.com/flights/number/${encodeURIComponent(num)}/${date}`,
-      {
-        method: 'GET', mode: 'cors', credentials: 'omit',
-        headers: { 'X-RapidAPI-Key': rapidApiKey, 'X-RapidAPI-Host': 'aerodatabox.p.rapidapi.com' }
-      }
-    );
+    let r = await fetch(url, opts);
+    // Auto-retry once on 429 with a 2s backoff (per-second throttle, not monthly)
+    if(r.status === 429){
+      await new Promise(res => setTimeout(res, 2000));
+      r = await fetch(url, opts);
+    }
     if(r.status === 401 || r.status === 403) return cacheReturn(k, { error: 'Auth failed — check key' });
     if(r.status === 429) return cacheReturn(k, { error: 'Rate limit' });
     if(!r.ok) return cacheReturn(k, { error: `API ${r.status}` });
@@ -945,7 +951,7 @@ async function refreshNow(){
       await lookupStatus(f.num, t.date, true);
       renderTravelers(currentTravelers());
       renderOverview(currentTravelers());
-      await new Promise(r => setTimeout(r, 250));
+      await new Promise(r => setTimeout(r, 600));
     }
   }
   btn.disabled = false;
