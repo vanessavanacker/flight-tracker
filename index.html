@@ -773,14 +773,25 @@ async function lookupStatus(num, date, force){
       const m = s.match(/[\sT](\d{2}:\d{2})/);
       return m ? m[1] : null;
     };
+    // For future/scheduled flights, AeroDataBox's predictedTime can be wildly wrong.
+    // Only trust actual/predicted/revised times once the flight is actually live or delayed.
+    const statusU = (f.status || '').toLowerCase();
+    const isLive = /depart|arriv|land|enroute|en route|inflight|airborne|flying|delay|cancel|divert|boarding|approaching|gateclosed/.test(statusU);
+    const liveTime = (seg) => {
+      const a = parseHHMM(t(seg?.actualTime));
+      if(a) return a;
+      const r = parseHHMM(t(seg?.revisedTime));
+      if(r) return r;
+      return isLive ? parseHHMM(t(seg?.predictedTime)) : null;
+    };
     const data = {
       status:       f.status || 'Unknown',
       depAirport:   f.departure?.airport?.iata || f.departure?.airport?.icao || f.departure?.airport?.name || '?',
       arrAirport:   f.arrival?.airport?.iata   || f.arrival?.airport?.icao   || f.arrival?.airport?.name   || '?',
       depScheduled: parseHHMM(t(f.departure?.scheduledTime)),
-      depActual:    parseHHMM(t(f.departure?.actualTime)) || parseHHMM(t(f.departure?.revisedTime)) || parseHHMM(t(f.departure?.predictedTime)),
+      depActual:    liveTime(f.departure),
       arrScheduled: parseHHMM(t(f.arrival?.scheduledTime)),
-      arrActual:    parseHHMM(t(f.arrival?.actualTime))   || parseHHMM(t(f.arrival?.revisedTime))   || parseHHMM(t(f.arrival?.predictedTime)),
+      arrActual:    liveTime(f.arrival),
       depTerminal:  f.departure?.terminal || '',
       depGate:      f.departure?.gate || '',
       airline:      f.airline?.name || '',
