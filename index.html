@@ -240,6 +240,8 @@ white-space:nowrap;
 .b-amber{background:rgba(245,158,11,.18);color:var(–amber);box-shadow:inset 0 0 0 1px rgba(245,158,11,.25)}
 .b-red{background:rgba(239,68,68,.18);color:var(–red);box-shadow:inset 0 0 0 1px rgba(239,68,68,.25)}
 .b-purple{background:rgba(167,139,250,.18);color:var(–purple);box-shadow:inset 0 0 0 1px rgba(167,139,250,.25)}
+a.badge-link{text-decoration:none;cursor:pointer;transition:background .15s}
+a.badge-link:hover{background:rgba(34,211,238,.28)}
 
 /* Modal */
 .overlay{
@@ -449,8 +451,8 @@ footer a{color:var(–text-mute);text-decoration:none;border-bottom:1px dotted v
     </div>
     <div class="field">
       <label>Other legs (trains, ferries, car)</label>
-      <textarea id="trav-notes-in" rows="2" placeholder="Eurostar 9123 · London → Brussels · 14:30"></textarea>
-      <div class="hint">One per line. Free text — not auto-tracked, just shown alongside flights.</div>
+      <textarea id="trav-notes-in" rows="2" placeholder="Eurostar 9123 · London → Brussels · 14:30 https://stpancras-highspeed.com/st-pancras-international/st-pancras-international-departures/"></textarea>
+      <div class="hint">One per line. Free text — paste a URL anywhere in the line to add a "Live ↗" button.</div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeTravelerModal()">Cancel</button>
@@ -879,14 +881,24 @@ function renderTravelers(list){
       const cached = statusCache[f.num + '|' + t.date];
       return renderLeg(f.num, cached?.data || null, t.date);
     }).join('');
-    const manualLegs = (t.notes || '').split('\n').map(s => s.trim()).filter(Boolean).map(line => `
+    const manualLegs = (t.notes || '').split('\n').map(s => s.trim()).filter(Boolean).map(line => {
+      const urlMatch = line.match(/(https?:\/\/\S+)/);
+      const url = urlMatch ? urlMatch[1] : null;
+      const label = url
+        ? line.replace(url, '').replace(/\s*[|·—–-]\s*$/, '').trim()
+        : line;
+      const badge = url
+        ? `<a class="badge b-cyan badge-link" href="${esc(url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">Live ↗</a>`
+        : `<span class="badge b-grey">Manual</span>`;
+      return `
       <div class="leg leg-manual">
         <div class="leg-num">·</div>
         <div>
-          <div class="leg-route">${esc(line)}</div>
+          <div class="leg-route">${esc(label)}</div>
         </div>
-        <span class="badge b-grey">Manual</span>
-      </div>`).join('');
+        ${badge}
+      </div>`;
+    }).join('');
     let issue = '';
     for(const f of (t.flights || [])){
       const s = statusCache[f.num + '|' + t.date]?.data;
